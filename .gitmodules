@@ -1,0 +1,3 @@
+[submodule "pyrogue"]
+	path = pyrogue
+	url = https://github.com/benob/pyrogue.git
