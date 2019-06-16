@@ -24,11 +24,11 @@ def wrap_text(text, width):
             x = 0
             output += ['']
             continue
-        if x + rl.size_text(word)[0] > width:
+        if x + rl.size_text(font, word)[0] > width:
             x = 0
             output += ['']
         output[-1] += word + ' '
-        x += rl.size_text(word + ' ')[0]
+        x += rl.size_text(font, word + ' ')[0]
     return output
 
  

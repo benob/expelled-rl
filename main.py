@@ -36,6 +36,11 @@ class Game:
                 action = actor.get_action()
                 while isinstance(action, actions.Action) and action.can_perform():
                     action = action.perform()
+                    # cancel repeatable actions if there is a monster
+                    if actor is player:
+                        for object in level.objects:
+                            if isinstance(object, actors.Monster) and object.is_hostile(player) and player.can_see(object):
+                                player.action = None
                 if action:
                     self.current += 1
                 elif actor is player:
@@ -82,8 +87,9 @@ class Game:
             builtins.level = levels.make_boss_map()
 
     def new(self):
+        controllers.Player.keys = [] # reset any pending keystroke
         self.current = 0
-        self.dungeon_level = 0
+        self.dungeon_level = -1
         builtins.player = monsters.make_monster('ghoul', 0, 0)
         self.next_level()
         player.push_controller(controllers.Player())
@@ -94,14 +100,15 @@ class Game:
         raise OSError
 
 rl.set_seed(0)
-rl.init('ExpelledRL', Game.WIDTH, Game.HEIGHT)
+rl.init_display('ExpelledRL', Game.WIDTH, Game.HEIGHT)
 rl.set_app_name('expelled-rl')
-rl.load_font('data/04B_03__.TTF', 8, 8)
-rl.load_image(0, 'data/tileset.png', 8, 8)
+builtins.font = rl.Font('data/04B_03__.TTF', 8)
+builtins.tileset = rl.Image('data/tileset.png', 8, 8)
 
 game = Game()
 game.new()
 game.push_scene(scenes.Playing())
+game.push_scene(scenes.Story())
 #try:
 #    game.load()
 #except Exception as e:
@@ -116,5 +123,5 @@ def update(event):
         for scene in game.scenes:
             scene.render()
 
-rl.run(update, rl.UPDATE_MOUSE|rl.UPDATE_KEY)
+rl.run(update)
 

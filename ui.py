@@ -38,7 +38,7 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color, s
  
     if show_value:
         name += ': ' + str(value) + '/' + str(maximum)
-    rl.print_text(8 * x + (8 * total_width // 2), y * 8, name, rl.WHITE, rl.ALIGN_CENTER)
+    rl.draw_text(font, 8 * x + (8 * total_width // 2), y * 8, name, rl.WHITE, rl.ALIGN_CENTER)
  
 class Button:
     pass

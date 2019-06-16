@@ -20,6 +20,7 @@ class Actor:
         self.sight_radius = 10
         self.blocks = False
         self.always_visible = False
+        #self.known = False
         self.speed = 10
         self.action = None
         self.energy = 0
@@ -118,14 +119,19 @@ class Actor:
         if (level.tile_in_fov(self.x, self.y) or
                 (self.always_visible and level.visited[self.x, self.y] > 0)):
             if game.state == 'dead' or (isinstance(self, Monster) and not self.is_hostile(player)) or not (isinstance(self, Monster) and 'invisible' in self.skills) or ('see_invisible' in player.skills) or self.distance_to(player) <= 1:
-                #if self.fg == 0:
-                #    level[self.x, self.y].draw((self.x + x_offset) * 8, (self.y + y_offset) * 8)
-                if self is player or (isinstance(self, Monster) and not self.is_hostile(player)):
-                    rl.colorize_tile(0, (self.x + x_offset) * 8, (self.y + y_offset) * 8, self.tile + 16, self.fg, self.bg)
+                if self.alive and player.alive and (self is player or (isinstance(self, Monster) and not self.is_hostile(player))):
+                    rl.draw_tile(tileset, (self.x + x_offset) * 8, (self.y + y_offset) * 8, self.tile + 16, self.fg, self.bg)
                 else:
-                    rl.colorize_tile(0, (self.x + x_offset) * 8, (self.y + y_offset) * 8, self.tile, self.fg, self.bg)
+                    rl.draw_tile(tileset, (self.x + x_offset) * 8, (self.y + y_offset) * 8, self.tile, self.fg, self.bg)
             if not level.tile_in_fov(self.x, self.y):
                 rl.fill_rect((self.x + x_offset) * 8, (self.y + y_offset) * 8, 8, 8, rl.color(0, 0, 0, 128))
+
+    #def enters_player_focus(self):
+    #    if player.can_see(self.x, self.y) and (game.state == 'dead' or (isinstance(self, Monster) and not self.is_hostile(player)) or not (isinstance(self, Monster) and 'invisible' in self.skills) or ('see_invisible' in player.skills) or self.distance_to(player) <= 1):
+    #        if not self.known:
+    #            self.known = True
+    #            print('cancel action')
+    #            player.action = None
 
     def info(self):
         return str(self)
@@ -218,10 +224,12 @@ class Monster(Actor):
         self.action = action
 
     def get_action(self):
-        self.controller.control(self)
+        if self.action is None and self.controller:
+            self.controller.control(self)
         action = self.action
-        self.action = None
         if action is not None:
+            if not action.repeat:
+                self.action = None
             if self.current_possession_cooldown > 0:
                 self.current_possession_cooldown -= 1
             if self.mana < self.max_mana:
@@ -279,6 +287,7 @@ class Monster(Actor):
             return
         # a simple formula for attack damage
         damage = rl.random_int(0, self.power) - rl.random_int(0, target.defense)
+        print('attack:', self, target, self.power, target.defense, damage)
  
         if damage > 0:
             #damage = rl.random_int(1, damage)
@@ -299,10 +308,14 @@ class Monster(Actor):
             self.hp -= damage
             if self.hp <= 0:
                 self.die()
+            if self is player:
+                self.action = None
         if perpetrator is not None:
             self.target = perpetrator
  
     def is_hostile(self, other):
+        if not self.alive or not other.alive:
+            return False
         if self is other:
             return False
         if self.target == other or other.target == self:

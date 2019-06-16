@@ -4,9 +4,10 @@ import actors
 import ui
 
 class Action:
-    def __init__(self, actor, cost):
+    def __init__(self, actor, cost, repeat=False):
         self.actor = actor
         self.cost = cost
+        self.repeat = repeat
 
     def can_perform(self):
         return self.actor.energy >= self.cost
@@ -64,6 +65,24 @@ class Move(Action):
         return False
 
 
+class Repeat(Action):
+    def __init__(self, action):
+        super().__init__(action.actor, 0, True)
+        self.action = action
+
+    def can_perform(self):
+        return self.action.can_perform()
+
+    def perform(self):
+        result = self.action.perform()
+        if not result:
+            self.repeat = False
+            self.actor.action = None
+        else:
+            self.action.actor.energy += self.action.cost
+        return result
+
+
 class Attack(Action):
     def __init__(self, actor, target):
         super().__init__(actor, 10)
@@ -75,6 +94,43 @@ class Attack(Action):
             return True
         return False
 
+
+class AutoExplore(Action):
+    def __init__(self, actor):
+        super().__init__(actor, actor.speed, True)
+        self.dx = self.dy = 0
+
+    def can_perform(self):
+        level.compute_autoexplore()
+        moves = level.to_visit.view(player.x - 1, player.y - 1, 3, 3)
+        x, y = moves.argmin(-1)
+        self.dx, self.dy = x - 1, y - 1
+        return moves[1, 1] > 0
+
+    def perform(self):
+        action = Move(self.actor, self.dx, self.dy)
+        return action.perform()
+
+
+class MoveTowards(Action):
+    def __init__(self, actor, x, y):
+        super().__init__(actor, actor.speed, True)
+        self.target_x = x
+        self.target_y = y
+
+    def can_perform(self):
+        path = level.blocked.shortest_path(self.actor.x, self.actor.y, self.target_x, self.target_y)
+        if len(path) > 0:
+            self.x, self.y = path[0]
+            return True
+        self.repeat = False
+        return False
+
+    def perform(self):
+        action = Move(self.actor, self.x - self.actor.x, self.y - self.actor.y)
+        return action.perform()
+
+
 class Cast(Action):
     def __init__(self, actor, cost, spell_function, *args):
         super().__init__(actor, cost)
@@ -84,3 +140,4 @@ class Cast(Action):
     def perform(self):
         if super().perform():
             self.spell_function(*self.args)
+

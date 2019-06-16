@@ -9,6 +9,7 @@ import actors
 import ui
 import const
 import powers
+import actions
 
 class Scene:
     def __init__(self):
@@ -37,7 +38,7 @@ class MessageBox(Scene):
 
     def render(self):
         lines = self.text.split('\n')
-        sizes = [rl.size_text(text) for text in [self.title] + lines]
+        sizes = [rl.size_text(font, text) for text in [self.title] + lines]
         width = max([size[0] for size in sizes])
         height = 8 + sum([size[1] for size in sizes])
         x = (game.WIDTH - width) // 2
@@ -45,9 +46,9 @@ class MessageBox(Scene):
 
         rl.fill_rect(x - 8, y - 8, width + 16, height + 16, rl.color(0, 0, 0, 192))
 
-        rl.print_text(x, y, self.title, rl.YELLOW)
+        rl.draw_text(font, x, y, self.title, rl.YELLOW)
         for i, line in enumerate(lines):
-            rl.print_text(x, y + (2 + i) * 8, line)
+            rl.draw_text(font, x, y + (2 + i) * 8, line)
 
 class Menu(Scene):
     def __init__(self, title, items, callback):
@@ -68,7 +69,7 @@ class Menu(Scene):
         self.selected = self.selected % len(self.items)
 
     def render(self):
-        sizes = [rl.size_text(text) for text in [self.title] + self.items]
+        sizes = [rl.size_text(font, text) for text in [self.title] + self.items]
         width = max([size[0] for size in sizes])
         height = 8 + sum([size[1] for size in sizes])
         x = (game.WIDTH - width) // 2
@@ -76,10 +77,10 @@ class Menu(Scene):
 
         rl.fill_rect(x - 8, y - 8, width + 16, height + 16, rl.color(0, 0, 0, 192))
 
-        rl.print_text(x, y, self.title, rl.YELLOW)
+        rl.draw_text(font, x, y, self.title, rl.YELLOW)
         for i, item in enumerate(self.items):
             color = rl.WHITE if i == self.selected else rl.DARKGRAY
-            rl.print_text(x, y + (2 + i) * 8, item, color)
+            rl.draw_text(font, x, y + (2 + i) * 8, item, color)
 
 
 class MainMenu(Menu):
@@ -111,6 +112,7 @@ class Playing(Scene):
         if event == rl.ESCAPE:
             game.push_scene(MainMenu())
         elif event > 0:
+            player.action = None
             controllers.Player.add_key(event)
             game.step()
             self.mouse_path = None
@@ -119,9 +121,20 @@ class Playing(Scene):
             x = mouse_x // 8 - const.SCREEN_WIDTH // 2 + player.x
             y = mouse_y // 8 - const.PANEL_Y // 2 + player.y
             if (x, y) in level and not level.blocked[x, y] and level.tile_in_fov(x, y):
-                self.mouse_path = level.blocked.shortest_path(player.x, player.y, x, y)
+                if button == 1:
+                    player.set_action(actions.MoveTowards(player, x, y))
+                    self.mouse_path = None
+                else:
+                    blocked_fov = level.fov.copy()
+                    blocked_fov.replace(0, 2)
+                    blocked_fov.replace(1, 0)
+                    blocked_fov.replace(2, 1)
+                    level.blocked.copy_masked(blocked_fov, level.blocked)
+                    self.mouse_path = blocked_fov.shortest_path(player.x, player.y, x, y)
             else:
                 self.mouse_path = None
+        elif player.action:
+            game.step()
 
     def render(self):
         x_offset = const.SCREEN_WIDTH // 2 - player.x
@@ -146,13 +159,13 @@ class Playing(Scene):
                     if level.blocked[x, y] == 0:
                         # draw world border
                         if x == 0:
-                            rl.draw_tile(0, (screen_x - 1) * 8, screen_y * 8, graphics.Tile.mapping[0].graphics)
+                            rl.draw_tile(tileset, (screen_x - 1) * 8, screen_y * 8, graphics.Tile.mapping[0].graphics)
                         if x == level.width - 1:
-                            rl.draw_tile(0, (screen_x + 1) * 8, screen_y * 8, graphics.Tile.mapping[0].graphics)
+                            rl.draw_tile(tileset, (screen_x + 1) * 8, screen_y * 8, graphics.Tile.mapping[0].graphics)
                         if y == 0:
-                            rl.draw_tile(0, screen_x * 8, (screen_y - 1) * 8, graphics.Tile.mapping[0].graphics)
+                            rl.draw_tile(tileset, screen_x * 8, (screen_y - 1) * 8, graphics.Tile.mapping[0].graphics)
                         if y == level.height - 1:
-                            rl.draw_tile(0, screen_x * 8, (screen_y + 1) * 8, graphics.Tile.mapping[0].graphics)
+                            rl.draw_tile(tileset, screen_x * 8, (screen_y + 1) * 8, graphics.Tile.mapping[0].graphics)
      
         # draw all objects in the list
         level.objects.sort(key=lambda actor: actor.z)
@@ -170,7 +183,7 @@ class Playing(Scene):
         # print the game messages
         y = 1
         for (line, color) in game.messages:
-            rl.print_text(const.MSG_X * 8, (const.PANEL_Y + y) * 8, line, color)
+            rl.draw_text(font, const.MSG_X * 8, (const.PANEL_Y + y) * 8, line, color)
             y += 1
      
         # show the player's stats
@@ -180,19 +193,21 @@ class Playing(Scene):
                 ui.render_bar(2, 2 + const.PANEL_Y, const.BAR_WIDTH, 'MANA', player.mana, player.max_mana, rl.BLUE, rl.BLACK) 
         else:
             ui.render_bar(2, 1 + const.PANEL_Y, const.BAR_WIDTH, 'DEAD', 0, 0, rl.RED, rl.BLACK, show_value=False) 
-        rl.draw_tile(0, 5, (const.PANEL_Y + 1) * 8, player.tile + 16)
+        rl.draw_tile(tileset, 5, (const.PANEL_Y + 1) * 8, player.tile + 16)
 
         if player.current_possession_cooldown > 0:
             ui.render_bar(0, 0, const.SCREEN_WIDTH, 'Possession cooldown', player.current_possession_cooldown, player.possession_cooldown, rl.INDIGO, rl.BLACK)
         if game.dungeon_level == 0:
-            rl.print_text(1 * 8, (const.PANEL_Y + 3) * 8, 'Outside', rl.LIGHTGRAY)
+            rl.draw_text(font, 1 * 8, (const.PANEL_Y + 3) * 8, 'Outside', rl.LIGHTGRAY)
         else:
-            rl.print_text(1 * 8, (const.PANEL_Y + 3) * 8, 'Dungeon level ' + str(game.dungeon_level), rl.LIGHTGRAY)
+            rl.draw_text(font, 1 * 8, (const.PANEL_Y + 3) * 8, 'Dungeon level ' + str(game.dungeon_level), rl.LIGHTGRAY)
 
         # draw mouse path
         if self.mouse_path:
-            for i, j in self.mouse_path:
+            for i, j in self.mouse_path[:-1]:
                 rl.fill_rect((i + x_offset) * 8, (j + y_offset) * 8, 8, 8, rl.color(255, 255, 0, 128))
+            i, j = self.mouse_path[-1]
+            rl.draw_rect((i + x_offset) * 8, (j + y_offset) * 8, 9, 9, rl.color(255, 255, 0))
             #rl.draw_rect((x + x_offset) * 8, (y + y_offset) * 8, 8, 8, rl.color(255, 255, 0))
 
 
@@ -212,13 +227,13 @@ class Story(Scene):
         text, tile1, tile2, bg = self.story[self.current]
         rl.clear()
         lines = util.wrap_text(text, game.WIDTH - 64)
-        rl.print_text(32, (game.HEIGHT - len(lines) * 8) // 2, '\n'.join(lines), rl.LIGHTGRAY)
+        rl.draw_text(font, 32, (game.HEIGHT - len(lines) * 8) // 2, '\n'.join(lines), rl.LIGHTGRAY)
         x = game.WIDTH // 2
         y = 8 + (game.HEIGHT + len(lines) * 8) // 2
         for i in range(4):
-            rl.draw_tile(0, x - 12 + i * 8, y + 2, bg)
-        rl.draw_tile(0, x - 8, y, tile1)
-        rl.draw_tile(0, x + 8, y, tile2)
+            rl.draw_tile(tileset, x - 12 + i * 8, y + 2, bg)
+        rl.draw_tile(tileset, x - 8, y, tile1)
+        rl.draw_tile(tileset, x + 8, y, tile2)
 
     def update(self, event):
         if event > 0:
@@ -245,7 +260,8 @@ Description:
 
 Controls:
   escape: menu
-  h j k l y u b n, arrows or keypad: move
+  h/j/k/l/y/u/b/n, arrows or keypad: move (shift = run)
+  o: autoexplore
   5 or space: wait
   a: perform an action (such as casting a spell)
   p: cast the possess spell
@@ -258,7 +274,7 @@ Controls:
         '''
         lines = util.wrap_text(text, const.SCREEN_WIDTH * 8 - 64)
         rl.clear()
-        rl.print_text(32, ((const.SCREEN_HEIGHT - len(lines)) // 2) * 8, '\n'.join(lines), rl.LIGHTGRAY)
+        rl.draw_text(font, 32, ((const.SCREEN_HEIGHT - len(lines)) // 2) * 8, '\n'.join(lines), rl.LIGHTGRAY)
 
     def update(self, event):
         if event > 0:
@@ -329,18 +345,18 @@ class Ending(Scene):
             text += '''Your body was never worth it. You abandon it and take the amulet. Its immense power surges through you and you finally get to know that subtle feeling of accomplishment. '''
         rl.clear()
         lines = util.wrap_text(text, const.SCREEN_WIDTH * 8 - 64)
-        rl.print_text(32, ((const.SCREEN_HEIGHT - len(lines)) // 2) * 8, '\n'.join(lines), rl.LIGHTGRAY)
+        rl.draw_text(font, 32, ((const.SCREEN_HEIGHT - len(lines)) // 2) * 8, '\n'.join(lines), rl.LIGHTGRAY)
         x = 8 * const.SCREEN_WIDTH // 2
         y = (1 + (const.SCREEN_HEIGHT + len(lines)) // 2) * 8
         for i in range(4):
-            rl.draw_tile(0, x - 12 + i * 8, y + 2, bg)
+            rl.draw_tile(tileset, x - 12 + i * 8, y + 2, bg)
         if holding:
-            rl.draw_tile(0, x - 2, y, tile1)
+            rl.draw_tile(tileset, x - 2, y, tile1)
             if tile2 is not None:
-                rl.draw_tile(0, x + 2, y - 4, tile2)
+                rl.draw_tile(tileset, x + 2, y - 4, tile2)
         else:
-            rl.draw_tile(0, x - 8, y, tile1)
-            rl.draw_tile(0, x + 8, y, tile2)
+            rl.draw_tile(tileset, x - 8, y, tile1)
+            rl.draw_tile(tileset, x + 8, y, tile2)
 
     def update(self, event):
         if event > 0:
@@ -363,9 +379,9 @@ class TargetTile(Scene):
         self.selected_x = self.center_x
         self.selected_y = self.center_y
         self.prompt = prompt
-        self.prompt_size = rl.size_text(prompt)
+        self.prompt_size = rl.size_text(font, prompt)
         self.instructions = 'Use mouse or movement keys and ENTER/SPACE to select. ESCAPE to cancel.'
-        self.instructions_size = rl.size_text(self.instructions)
+        self.instructions_size = rl.size_text(font, self.instructions)
 
     def render(self):
         max_range, center_x, center_y = self.max_range, self.center_x, self.center_y
@@ -376,8 +392,8 @@ class TargetTile(Scene):
                         rl.fill_rect(i * 8, j * 8, 8, 8, rl.color(255, 0, 0, 128))
         rl.draw_rect(self.selected_x * 8, self.selected_y * 8, 9, 9, rl.color(192, 192, 0))
 
-        rl.print_text(game.WIDTH // 2 - self.prompt_size[0] // 2, 8, self.prompt, rl.YELLOW)
-        rl.print_text(game.WIDTH // 2 - self.instructions_size[0] // 2, 8 * (const.PANEL_Y), self.instructions, rl.YELLOW)
+        rl.draw_text(font, game.WIDTH // 2 - self.prompt_size[0] // 2, 8, self.prompt, rl.YELLOW)
+        rl.draw_text(font, game.WIDTH // 2 - self.instructions_size[0] // 2, 8 * (const.PANEL_Y), self.instructions, rl.YELLOW)
 
     def update(self, key):
         dx = dy = 0

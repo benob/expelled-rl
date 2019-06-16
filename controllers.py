@@ -63,6 +63,7 @@ class Player(Controller):
 
     def control(self, actor):
         key = Player.get_key()
+        dx, dy = get_movement_from_key(key)
         if key == rl.T:
             game.push_scene(scenes.Help())
         elif key == rl.A:
@@ -77,9 +78,13 @@ class Player(Controller):
         elif key == rl.GREATER:
             if level.stairs.x == player.x and level.stairs.y == player.y:
                 game.next_level()
-        dx, dy = get_movement_from_key(key)
-        if not(dx == 0 and dy == 0):
-            actor.move(dx, dy)
+        if key == rl.O:
+            actor.set_action(actions.AutoExplore(actor))
+        elif not(dx == 0 and dy == 0):
+            if rl.shift_pressed():
+                actor.set_action(actions.Repeat(actions.Move(actor, dx, dy)))
+            else:
+                actor.move(dx, dy)
 
 
 class Wanderer(Controller):
@@ -105,7 +110,6 @@ class SpellEffect(Controller):
         self.duration = duration
 
     def control(self, monster):
-        print(monster, self.duration)
         if self.duration > 0:
             self.duration -= 1
             for obj in level.objects:
@@ -198,11 +202,11 @@ class MonsterAI(Controller):
                         action = monster.actions[selected]
                         info('selected', action)
                         if monster.distance_to(target) <= action.range:
-                            if action in [powers.LIGHTNING, powers.FEAR, powers.DIG, powers.SUMMON, powers.SUMMON_BAT, powers.SUMMON_EYE, powers.SUMMON_RAT, powers.SUMMON_SKELETON, powers.SUMMON]:
+                            if action in [powers.LIGHTNING, powers.FEAR, powers.SUMMON, powers.SUMMON_BAT, powers.SUMMON_EYE, powers.SUMMON_RAT, powers.SUMMON_SKELETON, powers.SUMMON]:
                                 action.perform(monster)
                             elif action in [powers.CONFUSE, powers.FREEZE, powers.TELEPORT]:
                                 action.perform(monster, target)
-                            elif action == powers.FIREBALL:
+                            elif action in [powers.FIREBALL, powers.DIG]:
                                 action.perform(monster, target.x, target.y)
                             else:
                                 raise ValueError('monster cannot handle action ' + str(action))
@@ -243,18 +247,12 @@ class ConfusedMonster(Controller):
         if self.num_turns > 0:  # still confused...
             # move in a random direction, and decrease the number of turns confused
             self.num_turns -= 1
-            if monster is player:
-                result = handle_keys(state='confused')
-                monster.move(rl.random_int(-1, 1), rl.random_int(-1, 1))
-                return result
-            else:
-                monster.move(rl.random_int(-1, 1), rl.random_int(-1, 1))
+            monster.move(rl.random_int(-1, 1), rl.random_int(-1, 1))
  
         else:  # restore the previous AI (this one will be deleted because it's not referenced anymore)
             monster.pop_controller()
             ui.message(util.capitalize(monster.get_name('{is}')) + ' no longer confused!', rl.RED)
-            if monster is player:
-                return handle_keys()
+            monster.controller.control(monster)
  
 
 class ParalyzedMonster(Controller):
@@ -284,16 +282,10 @@ class FrightenedMonster(Controller):
     def control(self, monster):
         if self.num_turns > 0:
             self.num_turns -= 1
-            if monster is player:
-                result = handle_keys(state='frightened')
-                monster.move_away_from(self.flee.x, self.flee.y)
-                return result
-            else:
-                monster.move_away_from(self.flee.x, self.flee.y)
+            monster.move_away_from(self.flee.x, self.flee.y)
         else:
             monster.pop_controller()
             if player.can_see(monster) or player is monster:
                 ui.message(util.capitalize(monster.get_name('{is}')) + ' not frightened anymore.', rl.ORANGE)
-            if monster is player:
-                return handle_keys()
+            monster.controller.control(monster)
 

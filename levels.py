@@ -11,10 +11,11 @@ import util
 
 class Level:
     def __init__(self, width, height):
-        self.tiles = rl.array(width, height)
-        self.blocked = rl.array(width, height)
-        self.visited = rl.array(width, height)
-        self.fov = rl.array(width, height)
+        self.tiles = rl.Array(width, height)
+        self.blocked = rl.Array(width, height)
+        self.visited_tiles = rl.Array(width, height)
+        self.visited = rl.Array(width, height)
+        self.fov = rl.Array(width, height)
         self.width = width
         self.height = height
         self.objects = []
@@ -44,7 +45,19 @@ class Level:
 
     def compute_fov(self):
         self.fov = self.blocked.field_of_view(player.x, player.y, player.sight_radius, 1, True)
-        self.tiles.copy_masked(self.visited, self.fov)
+        self.fov.copy_masked(self.visited, self.fov)
+
+    def compute_autoexplore(self):
+        self.to_visit = self.visited.copy()
+        self.to_visit.replace(1, 2)
+        self.blocked.copy_masked(self.to_visit, self.blocked, 1)
+        water = self.tiles.equals(Tile.WATER)
+        water.copy_masked(self.to_visit, water, 1)
+        lava = self.tiles.equals(Tile.LAVA)
+        lava.copy_masked(self.to_visit, lava, 1)
+        self.to_visit.replace(1, -1)
+        self.to_visit.replace(2, rl.INT_MAX)
+        self.to_visit.dijkstra()
 
     def tile_in_fov(self, x, y):
         if x >= 0 and x < self.width and y >= 0 and y < self.height:
@@ -162,14 +175,25 @@ def make_forest_map():
     for y in range(level.height):
         for x in range(level.width):
             if contains_tree(x, y):
-                level.objects.append(actors.Actor(x, y, graphics.TREE, 'tree', rl.GREEN, always_visible=True))
-                level.blocked[x, y] = 1
+                level[x, y] = Tile.mapping[Tile.WALL]
+                #level.objects.append(actors.Actor(x, y, graphics.TREE, 'tree', rl.GREEN, always_visible=True))
+                #level.blocked[x, y] = 1
+    level.blocked = level.tiles.equals(Tile.WALL)
     
     angle = rl.random_int(0, 360)
     distance = rl.random_int(2, 3)
     level.stairs = actors.Actor(center_x + int(distance * math.cos(angle)), center_y + int(distance * math.sin(angle)), graphics.ROCK_STAIRS, 'stairs', rl.WHITE, always_visible=True, z=-2)
     level.objects.append(level.stairs)
     level.compute_fov()
+
+    #distance = level.blocked.copy()
+    #distance.replace(0, rl.INT_MAX)
+    #distance.replace(1, -1)
+    #distance[player.x, player.y] = 0
+    #distance.dijkstra()
+    #distance.replace(rl.INT_MAX, -1)
+    #print(distance.max(), distance.argmax())
+
     return level
 
 def make_boss_map():
@@ -213,7 +237,7 @@ def make_dungeon_map2():
     generated = rooms.generate_level(size[game.dungeon_level], rooms.room_templates[game.dungeon_level - 1])
     level = Level(generated.width(), generated.height())
     level.tiles = generated
-    level.blocked = level.tiles.equals(Tile.ROCK)
+    level.blocked = level.tiles.equals(Tile.WALL)
     if game.dungeon_level == 3:
         level.create_river(Tile.WATER)
     elif game.dungeon_level == 5:
@@ -236,7 +260,7 @@ def make_dungeon_map2():
 
 def make_dungeon_map():
     level = Level(const.MAP_WIDTH, const.MAP_HEIGHT)
-    level.tiles.fill(Tile.ROCK)
+    level.tiles.fill(Tile.WALL)
     level.blocked.fill(1)
     level.objects = [player]
  

@@ -20,7 +20,7 @@ GRAY_FLOOR = 13
 WOOD_WALL = 14
 WOOD_FLOOR = 15
 
-TREE = 16
+TREE = 22
 GRASS = 17
 ROCK_STAIRS = 18
 LAVA = 19
@@ -78,7 +78,7 @@ class Tile:
         self.effect = effect
 
     def draw(self, x, y):
-        rl.draw_tile(0, x, y, self.graphics)
+        rl.draw_tile(tileset, x, y, self.graphics)
 
     @property
     def graphics(self):
@@ -88,7 +88,7 @@ class Tile:
  
     UNUSED = 0
     FLOOR = 1
-    ROCK = 2
+    WALL = 2
     WATER = 3
     LAVA = 4
     GRASS = 5
@@ -110,7 +110,7 @@ Tile.mapping = [
                 BOSS_FLOOR, # level 8 (boss)
         ]),
         Tile(2, 'rock', True, True, [
-                CAVE_ROCK, # level 0
+                TREE, # level 0
                 CAVE_ROCK, # level 1 (no healing)
                 CAVE_ROCK, # level 2 (skills)
                 BLUE_WALL, # level 3 (water)

@@ -852,7 +852,7 @@ def generate_level(num_rooms, template_subset):
     width = max_x - min_x
     height = max_y - min_y
 
-    level = rl.array(width, height)
+    level = rl.Array(width, height)
 
     for room in rooms:
         room.bake(level, -min_x, -min_y)
